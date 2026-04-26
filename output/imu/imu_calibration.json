@@ -1,0 +1,88 @@
+{
+  "source_file": "data/static_imu.txt",
+  "n_samples": 272482,
+  "duration_s": 2724.9899999999907,
+  "sample_rate_hz": 99.9933944711727,
+  "gyro_unit_guess": "deg/s (likely)",
+  "gravity_magnitude_measured": 9.820933280608667,
+  "static_attitude_from_gravity": {
+    "roll_deg": 1.6550756322220235,
+    "pitch_deg": -1.0004229598297287
+  },
+  "bias": {
+    "Gyro_X": 0.08489003607577746,
+    "Gyro_Y": 0.06587116158131545,
+    "Gyro_Z": 0.2925344948290162,
+    "Accel_X": -0.17147140669842406,
+    "Accel_Y": -0.2836098870017102,
+    "Accel_Z": 9.815339703283154
+  },
+  "noise_std": {
+    "Gyro_X": 0.08916796198543268,
+    "Gyro_Y": 0.09639883973394388,
+    "Gyro_Z": 0.09871175037034238,
+    "Accel_X": 0.006704911655344569,
+    "Accel_Y": 0.006874083146626143,
+    "Accel_Z": 0.006470629752897234
+  },
+  "min": {
+    "Gyro_X": -0.29353,
+    "Gyro_Y": -0.56093,
+    "Gyro_Z": -0.13316,
+    "Accel_X": -0.22389,
+    "Accel_Y": -0.31859,
+    "Accel_Z": 9.75827
+  },
+  "max": {
+    "Gyro_X": 0.53446,
+    "Gyro_Y": 0.49962,
+    "Gyro_Z": 0.75888,
+    "Accel_X": -0.12225,
+    "Accel_Y": -0.24619,
+    "Accel_Z": 9.88843
+  },
+  "allan_noise_params": {
+    "Gyro_X": {
+      "sigma_at_1s": 0.009306108723829578,
+      "bias_instability": 0.0026730936518040804,
+      "tau_at_min_s": 908.329999999997,
+      "arw_deg_per_sqrt_hr": 0.5583665234297747,
+      "bias_instability_deg_per_hr": 9.62313714649469
+    },
+    "Gyro_Y": {
+      "sigma_at_1s": 0.010203163524426588,
+      "bias_instability": 0.0030965276955976246,
+      "tau_at_min_s": 234.4154843823965,
+      "arw_deg_per_sqrt_hr": 0.6121898114655953,
+      "bias_instability_deg_per_hr": 11.147499704151448
+    },
+    "Gyro_Z": {
+      "sigma_at_1s": 0.011295267996690997,
+      "bias_instability": 0.003369078444956016,
+      "tau_at_min_s": 908.329999999997,
+      "arw_deg_per_sqrt_hr": 0.6777160798014598,
+      "bias_instability_deg_per_hr": 12.128682401841656
+    },
+    "Accel_X": {
+      "sigma_at_1s": 0.0005824567462153666,
+      "bias_instability": 0.00014370322589450394,
+      "tau_at_min_s": 908.329999999997,
+      "vrw_m_per_s_per_sqrt_hr": 0.034947404772922,
+      "bias_instability_mg": 0.014653650930185532
+    },
+    "Accel_Y": {
+      "sigma_at_1s": 0.0005652982883073154,
+      "bias_instability": 0.0003349277565207499,
+      "tau_at_min_s": 15.61103119116557,
+      "vrw_m_per_s_per_sqrt_hr": 0.03391789729843892,
+      "bias_instability_mg": 0.03415312635005327
+    },
+    "Accel_Z": {
+      "sigma_at_1s": 0.0004947757262926166,
+      "bias_instability": 0.00038357951955351994,
+      "tau_at_min_s": 8.740577361357277,
+      "vrw_m_per_s_per_sqrt_hr": 0.029686543577556995,
+      "bias_instability_mg": 0.03911422550550085
+    }
+  }
+}
