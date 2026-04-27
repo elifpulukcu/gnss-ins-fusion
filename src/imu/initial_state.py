@@ -164,6 +164,16 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     accel_expected = expected_accel_body(roll0, pitch0, g_mag)
     accel_bias = accel_mean - accel_expected
 
+    # Bulk accelerometer scale-factor estimate.
+    # |a_static| should equal local gravity if the sensor is perfectly scaled
+    # and bias-free. Any residual ratio is a mix of true scale error and
+    # axis-projected bias - we can't separate the two without controlled motion.
+    # If the three runs give consistent ratios, we read it as scale; if they
+    # scatter, the variation is mostly bias instability.
+    g_measured = float(np.linalg.norm(accel_mean))
+    scale_factor = g_measured / g_mag
+    scale_ppm = (scale_factor - 1.0) * 1e6
+
     # Pretty-print
     print(f"g at run location:  {g_mag:.5f} m/s^2")
     print(f"Initial attitude:   roll={roll0_deg:+.3f}, pitch={pitch0_deg:+.3f}, yaw={yaw0_deg:+.3f} deg")
@@ -171,6 +181,8 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     print(f"Gyro std   [deg/s]: {gyro_std[0]:+.4f}, {gyro_std[1]:+.4f}, {gyro_std[2]:+.4f}")
     print(f"Accel bias [m/s^2]: {accel_bias[0]:+.4f}, {accel_bias[1]:+.4f}, {accel_bias[2]:+.4f}")
     print(f"Accel std  [m/s^2]: {accel_std[0]:+.4f}, {accel_std[1]:+.4f}, {accel_std[2]:+.4f}")
+    print(f"|accel mean| = {g_measured:.5f} m/s^2  vs  g_local = {g_mag:.5f}  "
+          f"-> scale = {scale_factor:.6f}  ({scale_ppm:+.1f} ppm)")
 
     if global_calib is not None:
         global_gyro = np.array([global_calib["bias"][c] for c in GYRO_COLS])
@@ -228,6 +240,12 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
         "accel_expected_gravity_m_s2": dict(zip(ACCEL_COLS, accel_expected.tolist())),
         "accel_bias_m_s2": dict(zip(ACCEL_COLS, accel_bias.tolist())),
         "accel_std_m_s2": dict(zip(ACCEL_COLS, accel_std.tolist())),
+        "accel_scale_estimate": {
+            "g_measured": g_measured,
+            "g_expected_wgs84": g_mag,
+            "scale_factor": scale_factor,
+            "ppm_offset": scale_ppm,
+        },
     }
 
 
