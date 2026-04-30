@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import sys
 import time as tm
-import gnss.utils.constants as cnst
+import src.gnss.utils.constants as cnst
 
 class rinexReader:
     

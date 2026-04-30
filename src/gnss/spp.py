@@ -1,11 +1,10 @@
 
-import gnss.utils.rinexReader as rr
-import gnss.utils.SatOrbits as so
-import gnss.utils.frame2kml as fk
+import src.gnss.utils.rinexReader as rr
+import src.gnss.utils.SatOrbits as so
+import src.gnss.utils.frame2kml as fk
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import time
 import datetime
 from pathlib import Path
@@ -15,7 +14,7 @@ RUN_NUMBER = 2
 current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent.parent
 
-filepath = f"{project_root}/data/run2/run{RUN_NUMBER}.obs"
+filepath = f"{project_root}/data/run{RUN_NUMBER}/run{RUN_NUMBER}.obs"
 rinexFile = rr.rinexReader(filepath)
 svpos = so.sp3Orbits(f"{project_root}/data/COD0OPSRAP_20261130000_01D_05M_ORB.SP3")
 
@@ -171,7 +170,7 @@ processingtime = round(endrun-startrun, 3)
 print("")
 print(f"Computed {len(rinexFile.timelist)} solutions in: {processingtime} seconds")
 
-soldf = pd.DataFrame.from_dict(sol)
+soldf = pd.DataFrame.from_dict(sol, orient='index')
 soldf.index = pd.to_datetime(soldf.index)
 
 # Convert UTC to GPS
@@ -181,5 +180,4 @@ soldf = soldf.drop(columns=['cdt'])
 print(soldf.head())
 soldf.to_csv(f"{project_root}/output/gnss/SPP_solutions_run{RUN_NUMBER}.csv")
 
-# Convert to kml
-fk.dataframe_to_kml(soldf, filename=f"{project_root}/output/gnss/Run{RUN_NUMBER}.kml", altitudeMode="clampToGround", color="green", placeorline=3)
+
