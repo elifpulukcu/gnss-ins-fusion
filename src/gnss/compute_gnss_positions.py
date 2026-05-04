@@ -1,7 +1,7 @@
 
 import src.gnss.utils.rinexReader as rr
 import src.gnss.utils.SatOrbits as so
-from spp import spp_loop, utc_to_gps_sow
+from src.gnss.spp import spp_loop, utc_to_gps_sow
 
 import pandas as pd
 from pathlib import Path
