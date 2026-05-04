@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import sys
 import time as tm
-import src.gnss.utils.constants as cnst
+import constants as cnst
 
 class rinexReader:
     
@@ -332,10 +332,14 @@ class rinexReader:
             if line[0] == '>':
                 # Read the epoch
                 h = line[2:].split()
-                t = [int(float(n)) for n in h[0:6]]
-                msec = int(float(h[5].split('.')[1])/10000)
-                
-                epoch = datetime.datetime(t[0], t[1], t[2], t[3], t[4], t[5])
+                sec_float = float(h[5])
+                sec_int = int(sec_float)
+                microsec = int(round((sec_float - sec_int) * 1e6))
+
+                epoch = datetime.datetime(
+                    int(h[0]), int(h[1]), int(h[2]),
+                    int(h[3]), int(h[4]), sec_int, microsec
+                )
                 nSat = int(h[7])
                 
                 # Check if there are missing epochs
