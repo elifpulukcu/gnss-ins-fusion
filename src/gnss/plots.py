@@ -22,7 +22,7 @@ def ecef_to_latlon(x, y, z):
     return np.degrees(lat), np.degrees(lon), h
 
 # --- Load SPP ---
-spp = pd.read_csv("SPP_solutions_run2.csv", index_col=0)
+spp = pd.read_csv("output/gnss/SPP_solutions_run2.csv", index_col=0)
 spp_lat, spp_lon, _ = ecef_to_latlon(spp['X'].values, spp['Y'].values, spp['Z'].values)
 
 # --- Load Ground Truth ---
