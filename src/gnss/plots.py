@@ -1,85 +1,162 @@
-import pandas as pd
-import numpy as np
+"""
+GNSS Trajectory Analysis
+Visualizes SPP solutions vs ground truth for multiple runs,
+each saved as an individual figure overlaid on an OSM basemap.
+"""
+
+import io
+import warnings
+from pathlib import Path
+
+import contextily as cx
 import geopandas as gpd
-from shapely.geometry import Point
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from shapely.geometry import Point
+
+warnings.filterwarnings("ignore")
 
 
-def ecef_to_latlon(x, y, z):
-    """Convert ECEF to geodetic lat/lon/h (WGS84)"""
-    a = 6378137.0          # semi-major axis
-    e2 = 6.69437999014e-3  # eccentricity squared
-    
+WGS84        = "EPSG:4326"
+WEB_MERCATOR = "EPSG:3857"
+RUNS         = [2, 3, 4]
+
+DATA_DIR   = Path("data")
+OUTPUT_DIR = Path("output/gnss")
+
+PLOT_STYLE = {
+    "ground_truth": dict(color="#2196F3", markersize=2, label="Ground Truth", zorder=3),
+    "spp":          dict(color="#F44336", markersize=4, label="SPP Solution",  zorder=4),
+}
+
+
+def ecef_to_latlon(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Convert ECEF coordinates to geodetic lat/lon/height (WGS84).
+
+    Parameters
+    ----------
+    x, y, z : np.ndarray
+        ECEF coordinates in metres.
+
+    Returns
+    -------
+    lat, lon, h : np.ndarray
+        Latitude and longitude in degrees; ellipsoidal height in metres.
+    """
+    a  = 6_378_137.0       # WGS84 semi-major axis (m)
+    e2 = 6.69437999014e-3  # WGS84 first eccentricity squared
+
     lon = np.arctan2(y, x)
-    p = np.sqrt(x**2 + y**2)
-    lat = np.arctan2(z, p * (1 - e2))  # initial estimate
-    
-    for _ in range(10):  # iterate to converge
-        N = a / np.sqrt(1 - e2 * np.sin(lat)**2)
+    p   = np.hypot(x, y)
+    lat = np.arctan2(z, p * (1 - e2))  # Bowring initial estimate
+
+    for _ in range(10):
+        N   = a / np.sqrt(1 - e2 * np.sin(lat) ** 2)
         lat = np.arctan2(z + e2 * N * np.sin(lat), p)
-    
+
     h = p / np.cos(lat) - N
     return np.degrees(lat), np.degrees(lon), h
 
-# --- Load SPP ---
-spp = pd.read_csv("output/gnss/SPP_solutions_run2.csv", index_col=0)
-spp_lat, spp_lon, _ = ecef_to_latlon(spp['X'].values, spp['Y'].values, spp['Z'].values)
 
-# --- Load Ground Truth ---
-import io
 
-with open("data/run2/run2_groundtruth.txt", 'r') as f:
-    lines = [line for line in f if line.strip() and line.strip()[0].isdigit()]
 
-gt = pd.read_csv(io.StringIO(''.join(lines)),
-                 sep=r'\s+',
-                 header=None,
-                 names=['GPSTime','X','Y','Z','Heading','Pitch','Roll','VX','VY','VZ','UTCTime'])
+def load_spp(run: int) -> gpd.GeoDataFrame:
+    """Load SPP solution CSV and return a Web-Mercator GeoDataFrame."""
+    path    = OUTPUT_DIR / f"SPP_solutions_run{run}.csv"
+    df      = pd.read_csv(path, index_col=0)
+    lat, lon, _ = ecef_to_latlon(df["X"].values, df["Y"].values, df["Z"].values)
 
-print(gt.head())
-gt.columns = ['GPSTime','X','Y','Z','Heading','Pitch','Roll','VX','VY','VZ','UTCTime']
-gt_lat, gt_lon, _ = ecef_to_latlon(gt['X'].values, gt['Y'].values, gt['Z'].values)
+    return gpd.GeoDataFrame(
+        {"GPSTime": df.index},
+        geometry=[Point(lo, la) for lo, la in zip(lon, lat)],
+        crs=WGS84,
+    ).to_crs(WEB_MERCATOR)
 
-# --- Create GeoDataFrames ---
-gdf_spp = gpd.GeoDataFrame(
-    {'GPSTime': spp.index},
-    geometry=[Point(lon, lat) for lon, lat in zip(spp_lon, spp_lat)],
-    crs="EPSG:4326"
-)
 
-gdf_gt = gpd.GeoDataFrame(
-    {'GPSTime': gt['GPSTime'].values},
-    geometry=[Point(lon, lat) for lon, lat in zip(gt_lon, gt_lat)],
-    crs="EPSG:4326"
-)
+def load_ground_truth(run: int) -> gpd.GeoDataFrame:
+    """Load ground-truth text file and return a Web-Mercator GeoDataFrame."""
+    path = DATA_DIR / f"run{run}" / f"run{run}_groundtruth.txt"
 
-# --- Plot ---
-fig, ax = plt.subplots(figsize=(10, 8))
-gdf_gt.plot(ax=ax, color='blue', markersize=2, label='Ground Truth')
-gdf_spp.plot(ax=ax, color='red', markersize=4, label='SPP Solution')
-plt.legend()
-plt.title("SPP vs Ground Truth")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.tight_layout()
-plt.show()
+    with path.open() as fh:
+        numeric_lines = [l for l in fh if l.strip() and l.strip()[0].isdigit()]
 
-fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
+    df = pd.read_csv(
+        io.StringIO("".join(numeric_lines)),
+        sep=r"\s+",
+        header=None,
+        names=["GPSTime", "X", "Y", "Z", "Heading", "Pitch", "Roll", "VX", "VY", "VZ", "UTCTime"],
+    )
 
-components = ['X', 'Y', 'Z']
-colors_spp = ['red', 'green', 'blue']
-colors_gt = ['darkred', 'darkgreen', 'darkblue']
+    lat, lon, _ = ecef_to_latlon(df["X"].values, df["Y"].values, df["Z"].values)
 
-# Compare groundtruth and spp solution for each coordinate and time step
+    return gpd.GeoDataFrame(
+        {"GPSTime": df["GPSTime"].values},
+        geometry=[Point(lo, la) for lo, la in zip(lon, lat)],
+        crs=WGS84,
+    ).to_crs(WEB_MERCATOR)
 
-for i, (comp, c_spp, c_gt) in enumerate(zip(components, colors_spp, colors_gt)):
-    axes[i].plot(spp.index, spp[comp], color=c_spp, linewidth=1, label='SPP', alpha=0.7)
-    axes[i].plot(gt['GPSTime'], gt[comp], color=c_gt, linewidth=1, label='Ground Truth', alpha=0.7)
-    axes[i].set_ylabel(f'{comp} (m)')
-    axes[i].legend(loc='upper right')
-    axes[i].grid(True)
 
-axes[2].set_xlabel('GPS Time (SoW)')
-fig.suptitle('SPP vs Ground Truth - Position Components over Time')
-plt.tight_layout()
-plt.show()
+
+
+def plot_run(run: int) -> plt.Figure:
+    """
+    Create and save a standalone trajectory map for a single run.
+
+    Parameters
+    ----------
+    run : int
+        Run number to load and plot.
+
+    Returns
+    -------
+    fig : plt.Figure
+    """
+    print(f"  Loading run {run}…")
+    gdf_gt  = load_ground_truth(run)
+    gdf_spp = load_spp(run)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    gdf_gt.plot(ax=ax,  **PLOT_STYLE["ground_truth"])
+    gdf_spp.plot(ax=ax, **PLOT_STYLE["spp"])
+
+    cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+
+    ax.set_title(f"SPP Solution vs Ground Truth — Run {run}", fontsize=14, fontweight="bold", pad=12)
+    ax.set_axis_off()
+
+    ax.legend(
+        loc="lower right",
+        fontsize=11,
+        markerscale=2,
+        frameon=True,
+        facecolor="white",
+        edgecolor="#cccccc",
+    )
+
+    fig.tight_layout()
+    return fig
+
+
+
+def main() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    for run in RUNS:
+        print(f"Generating plot for run {run}…")
+        fig      = plot_run(run)
+        out_path = OUTPUT_DIR / f"trajectory_map_run{run}.png"
+        fig.savefig(out_path, dpi=150, bbox_inches="tight")
+        print(f"  Saved → {out_path}")
+        plt.show()
+        plt.close(fig)  # free memory before next run
+
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()

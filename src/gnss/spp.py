@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import datetime
 
-clight = 299792458 # m/s
+CLIGHT = 299792458 # m/s
 
 def _create_kernel(obs, satpos, x):
     """ 
@@ -28,6 +28,7 @@ def _create_kernel(obs, satpos, x):
     L = obs.values.flatten() - rng1.values.flatten() - x[3]
     L = pd.DataFrame(L, index=obs.index, columns=['L']) 
     return L, A
+
 
 def _spp(obs, satpos, x0):
     """
@@ -57,6 +58,7 @@ def _spp(obs, satpos, x0):
     x = pd.Series(x, index=['X', 'Y', 'Z', 'cdt'], name='Solution') 
     return x
 
+
 def spp_loop(rinexFile: rr.rinexReader, svpos: so.sp3Orbits, sigTypes: str):
 
     """Calculate SPP solutions for each epoch in the 
@@ -73,12 +75,12 @@ def spp_loop(rinexFile: rr.rinexReader, svpos: so.sp3Orbits, sigTypes: str):
         obs = rinexFile.get_epoch_data(epoch, oTypes=sigTypes)
         obs = obs.dropna() 
         print(f"Observations for epoch {epoch}: {obs.values.flatten()}")
-        tau = obs.loc[:,'C1C'] / clight
+        tau = obs.loc[:,'C1C'] / CLIGHT
         satpos = svpos.getSvPos(epoch, tau)
         print(f"Satellite positions for epoch {epoch}:\n{satpos}")
 
         # Split satellite positions and clock errors
-        cdts = satpos.iloc[:, 3] * clight 
+        cdts = satpos.iloc[:, 3] * CLIGHT 
         satpos = satpos.iloc[:, :3] 
         
         obs = obs + cdts.values[:, None]
@@ -91,6 +93,7 @@ def spp_loop(rinexFile: rr.rinexReader, svpos: so.sp3Orbits, sigTypes: str):
     print(f"Computed {len(rinexFile.timelist)} solutions in: {processingtime} seconds")
 
     return sol
+
     
 def utc_to_gps_sow(dt):
     """
