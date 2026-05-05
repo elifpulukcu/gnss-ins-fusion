@@ -17,11 +17,15 @@ Note on run4:
 """
 
 import sys
+import warnings
 from pathlib import Path
 
+import contextily as cx
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from shapely.geometry import LineString
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src" / "utils"))
@@ -42,6 +46,9 @@ FIG_DIR = OUT_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 RUN_NAMES = ["run2", "run3", "run4"]
+
+WGS84 = "EPSG:4326"
+WEB_MERCATOR = "EPSG:3857"
 
 
 def run_pure_ins(run_name: str) -> dict:
@@ -149,6 +156,8 @@ def compare_with_groundtruth(ins: dict) -> dict:
 
     return {
         "gt_times": gt_times,
+        "pos_ins_ecef": pos_ins_at_gt,
+        "pos_gt_ecef": pos_gt,
         "pos_ins_ned": pos_ins_ned,
         "pos_gt_ned": pos_gt_ned,
         "pos_err_e": pos_err_e,
@@ -197,6 +206,55 @@ def plot_trajectory(run_name: str, cmp: dict) -> Path:
 
     out = FIG_DIR / f"ins_only_{run_name}_trajectory.png"
     fig.savefig(out, dpi=120)
+    plt.close(fig)
+
+    return out
+
+
+def _ecef_to_latlon_deg(pos_ecef: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Convert an (N, 3) ECEF array to (lat_deg, lon_deg) using coord_frames."""
+    lat, lon, _ = ecef_to_llh(pos_ecef[:, 0], pos_ecef[:, 1], pos_ecef[:, 2])
+    return np.rad2deg(lat), np.rad2deg(lon)
+
+
+def _trajectory_gdf(pos_ecef: np.ndarray) -> gpd.GeoDataFrame:
+    """Build a Web-Mercator LineString GeoDataFrame from an ECEF trajectory."""
+    lat, lon = _ecef_to_latlon_deg(pos_ecef)
+    line = LineString(np.column_stack([lon, lat]))
+    return gpd.GeoDataFrame(geometry=[line], crs=WGS84).to_crs(WEB_MERCATOR)
+
+
+def plot_trajectory_map(run_name: str, cmp: dict) -> Path:
+    """Overlay groundtruth and pure INS trajectory on an OSM basemap."""
+    gdf_gt = _trajectory_gdf(cmp["pos_gt_ecef"])
+    gdf_ins = _trajectory_gdf(cmp["pos_ins_ecef"])
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    gdf_gt.plot(ax=ax, color="#2196F3", linewidth=2.0, label="groundtruth", zorder=4)
+    gdf_ins.plot(ax=ax, color="#F44336", linewidth=1.0, alpha=0.9, label="pure INS", zorder=3)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+
+    ax.set_title(
+        f"Pure INS vs Ground Truth - {run_name}",
+        fontsize=14, fontweight="bold", pad=12,
+    )
+    ax.set_axis_off()
+    ax.legend(
+        loc="lower right",
+        fontsize=11,
+        frameon=True,
+        facecolor="white",
+        edgecolor="#cccccc",
+    )
+
+    fig.tight_layout()
+
+    out = FIG_DIR / f"ins_only_{run_name}_trajectory_map.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     return out
@@ -315,6 +373,7 @@ def main():
         cmp = compare_with_groundtruth(ins)
 
         plot_trajectory(run, cmp)
+        plot_trajectory_map(run, cmp)
         plot_errors(run, cmp)
         save_csv(run, ins)
 
