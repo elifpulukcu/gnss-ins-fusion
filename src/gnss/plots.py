@@ -7,6 +7,7 @@ each saved as an individual figure overlaid on an OSM basemap.
 import io
 import warnings
 from pathlib import Path
+import argparse
 
 import contextily as cx
 import geopandas as gpd
@@ -29,6 +30,8 @@ PLOT_STYLE = {
     "ground_truth": dict(color="#2196F3", markersize=2, label="Ground Truth", zorder=3),
     "spp":          dict(color="#F44336", markersize=4, label="SPP Solution",  zorder=4),
 }
+
+
 
 
 def ecef_to_latlon(
@@ -144,7 +147,17 @@ def plot_run(run: int) -> plt.Figure:
 
 
 def main() -> None:
+
+    argparser = argparse.ArgumentParser(description="Compute SPP solutions from RINEX observations.")
+    argparser.add_argument("--run", type=int, default=None, help="Run number to process (default: 2)")
+    args = argparser.parse_args()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if args.run is not None:
+        RUNS = [args.run]
+    else:
+        RUNS = [2, 3, 4]    
 
     for run in RUNS:
         print(f"Generating plot for run {run}…")
