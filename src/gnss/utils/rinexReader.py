@@ -28,6 +28,7 @@ import sys
 import time as tm
 import src.gnss.utils.constants as cnst
 
+
 class rinexReader:
     
     def __init__(self, path=False):
