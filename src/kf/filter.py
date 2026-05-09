@@ -10,12 +10,12 @@ class ErrorStateKF:
 
         # Initial tuning values; adjust later
         if R_pos is None:
-            self.R_pos = np.eye(3) * 5.0**2   # GNSS position noise: 5 m
+            self.R_pos = np.eye(3) * 20.0**2   # GNSS position noise: 5 m
         else:
             self.R_pos = R_pos
 
         if R_vel is None:
-            self.R_vel = np.eye(3) * 0.5**2   # GNSS velocity noise: 0.5 m/s
+            self.R_vel = np.eye(3) * 0.5**2   # GNSS velocity noise: 2 m/s
         else:
             self.R_vel = R_vel
     
@@ -27,6 +27,7 @@ class ErrorStateKF:
         # and build_Q from noise.py
          # 1. Bias-corrected specific force
         f_b = f_b_meas - state.bias_a
+        #f_b = f_b_meas
 
         # 2. Build continuous-time dynamics matrix F
         F = build_F(state.C_b_e, f_b)
