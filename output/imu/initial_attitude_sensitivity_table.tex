@@ -1,0 +1,16 @@
+\begin{table}
+\caption{Sensitivity of pure INS drift to initial roll/pitch initialization. The diagnostic mode uses reference roll/pitch only for validation and is not part of the operational pipeline.}
+\label{tab:initial_attitude_sensitivity}
+\begin{tabular}{llrrrrr}
+\toprule
+run & mode & duration_s & final_pos_err_m & max_pos_err_m & mean_pos_err_m & max_vel_err_m_s \\
+\midrule
+run2 & operational & 393.90 & 1445.38 & 1445.38 & 417.88 & 8.43 \\
+run2 & diagnostic_ref_rp & 393.90 & 1216.46 & 1216.46 & 299.52 & 8.05 \\
+run3 & operational & 296.90 & 168.19 & 168.19 & 103.95 & 2.10 \\
+run3 & diagnostic_ref_rp & 296.90 & 970.48 & 970.48 & 307.73 & 7.77 \\
+run4 & operational & 234.90 & 925.85 & 925.85 & 252.64 & 8.09 \\
+run4 & diagnostic_ref_rp & 234.90 & 1799.73 & 1799.73 & 539.78 & 15.59 \\
+\bottomrule
+\end{tabular}
+\end{table}

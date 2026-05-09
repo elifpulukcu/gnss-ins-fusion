@@ -25,11 +25,12 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src" / "utils"))
 
-from coord_frames import ecef_to_llh, gravity_wgs84
+from coord_frames import OMEGA_IE_E, R_ecef_enu, ecef_to_llh, gravity_wgs84
 
 DATA_DIR = REPO_ROOT / "data"
 OUT_DIR = REPO_ROOT / "output" / "imu"
 FIG_DIR = OUT_DIR / "figures"
+SPP_DIR = REPO_ROOT / "output" / "gnss"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -118,17 +119,50 @@ def imu_in_window(imu_df: pd.DataFrame, t_start: float, t_end: float) -> pd.Data
     return imu_df.loc[mask].reset_index(drop=True)
 
 
+def load_spp_initial(run_name: str, t0_min: float) -> tuple[float, np.ndarray]:
+    """Get the initial ECEF position from the SPP solution.
+
+    Returns the first SPP epoch at or after t0_min and the corresponding
+    ECEF position. For run3 the SPP coverage starts after the groundtruth
+    t0, so the returned epoch may be slightly later than t0_min.
+    """
+    spp_path = SPP_DIR / f"SPP_solutions_{run_name}.csv"
+    spp = pd.read_csv(spp_path)
+
+    valid = spp[spp["GPSTime"] >= t0_min]
+    if valid.empty:
+        raise RuntimeError(
+            f"{run_name}: no SPP solutions at or after t0={t0_min:.2f}"
+        )
+
+    t0_spp = float(valid["GPSTime"].iloc[0])
+    pos0 = valid[["X", "Y", "Z"]].iloc[0].values
+
+    return t0_spp, pos0
+
+
 def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     print(f"\n--- {run_name} ---")
 
-    gt = load_groundtruth(DATA_DIR / run_name / f"{run_name}_groundtruth.txt")
+    gt_full = load_groundtruth(DATA_DIR / run_name / f"{run_name}_groundtruth.txt")
     imu = load_imu(DATA_DIR / run_name / f"{run_name}_imu.txt")
 
+    # Initial position comes from our own SPP solution (first epoch at or
+    # after the groundtruth start time). For run3 this shifts t0 forward
+    # by ~0.9 s because the SPP coverage starts later than the groundtruth.
+    t0_gt = float(gt_full["GPSTime"].iloc[0])
+    t0, pos0 = load_spp_initial(run_name, t0_gt)
+
+    # Align the groundtruth and IMU windows to the SPP-derived t0.
+    gt = gt_full[gt_full["GPSTime"] >= t0].reset_index(drop=True)
+    if gt.empty:
+        raise RuntimeError(f"{run_name}: no groundtruth at or after t0={t0:.2f}")
     first = gt.iloc[0]
 
-    t0 = float(first["GPSTime"])
-    pos0 = np.array([first["X-ECEF"], first["Y-ECEF"], first["Z-ECEF"]])
-    vel0 = np.array([first["VX-ECEF"], first["VY-ECEF"], first["VZ-ECEF"]])
+    # Static start: vehicle is stationary at t0 (verified from the
+    # groundtruth speed below). SPP cannot supply velocity directly, so
+    # we initialise vel = 0 and rely on the static segment check.
+    vel0 = np.zeros(3)
 
     # Heading comes from the provided Heading column. Roll and pitch are
     # estimated from the static accelerometer mean below.
@@ -154,7 +188,7 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     n_imu = len(imu_static)
     print(f"IMU samples in window: {n_imu}")
 
-    lat0, _, h0 = ecef_to_llh(*pos0)
+    lat0, lon0, h0 = ecef_to_llh(*pos0)
     g_mag = float(gravity_wgs84(lat0, h0))
 
     gyro_mean = imu_static[GYRO_COLS].mean().values
@@ -166,6 +200,19 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     roll0, pitch0 = attitude_from_static_accel(accel_mean)
     roll0_deg = float(np.rad2deg(roll0))
     pitch0_deg = float(np.rad2deg(pitch0))
+
+    # While stationary, raw gyro = omega_ie_b + bias_true.
+    # mechanize_step subtracts omega_ie_b explicitly, so bias_g must store
+    # only bias_true. We build the initial body->ECEF DCM and project
+    # OMEGA_IE_E into the body frame, then subtract it from the raw mean.
+    cH, sH = np.cos(yaw0), np.sin(yaw0)
+    cP, sP = np.cos(pitch0), np.sin(pitch0)
+    cR, sR = np.cos(roll0), np.sin(roll0)
+    C_b_n_init = (np.array([[cH, sH, 0], [-sH, cH, 0], [0, 0, 1]])
+                  @ np.array([[1, 0, 0], [0, cP, -sP], [0, sP, cP]])
+                  @ np.array([[cR, 0, sR], [0, 1, 0], [-sR, 0, cR]]))
+    C_b_e_init = R_ecef_enu(lat0, lon0) @ C_b_n_init
+    gyro_mean = gyro_mean - np.rad2deg(C_b_e_init.T @ OMEGA_IE_E)
 
     accel_expected = expected_accel_body(roll0, pitch0, g_mag)
     accel_bias = accel_mean - accel_expected
@@ -240,10 +287,24 @@ def process_run(run_name: str, global_calib: Optional[dict]) -> dict:
     plt.close(fig)
     print(f"Saved {out_fig}")
 
+    pos_gt_at_t0 = np.array([first["X-ECEF"], first["Y-ECEF"], first["Z-ECEF"]])
+    spp_minus_gt = pos0 - pos_gt_at_t0
+    spp_minus_gt_norm = float(np.linalg.norm(spp_minus_gt))
+
     return {
         "t0": t0,
+        "t0_groundtruth": t0_gt,
         "pos_ecef": pos0.tolist(),
+        "pos_source": "spp_solution_first_epoch_at_or_after_t0",
         "vel_ecef": vel0.tolist(),
+        "vel_source": "static_start_assumption",
+        "pos_groundtruth_at_t0": pos_gt_at_t0.tolist(),
+        "spp_minus_groundtruth_m": {
+            "x": float(spp_minus_gt[0]),
+            "y": float(spp_minus_gt[1]),
+            "z": float(spp_minus_gt[2]),
+            "norm": spp_minus_gt_norm,
+        },
         "attitude_deg": {
             "roll": roll0_deg,
             "pitch": pitch0_deg,

@@ -1,0 +1,7 @@
+Quantity,Mean,Std,Allan metric,Interpretation
+Gyro_X,0.08489003607577746,0.08916796198543268,ARW=0.558 deg/sqrt(hr),Approximate gyro bias/noise level
+Gyro_Y,0.06587116158131545,0.09639883973394388,ARW=0.612 deg/sqrt(hr),Approximate gyro bias/noise level
+Gyro_Z,0.2925344948290162,0.09871175037034238,ARW=0.678 deg/sqrt(hr),Approximate gyro bias/noise level
+Accel_X,-0.17147140669842406,0.006704911655344569,VRW=0.035 m/s/sqrt(hr),Gravity projection + accelerometer bias/noise
+Accel_Y,-0.2836098870017102,0.006874083146626143,VRW=0.034 m/s/sqrt(hr),Gravity projection + accelerometer bias/noise
+Accel_Z,9.815339703283154,0.006470629752897234,VRW=0.030 m/s/sqrt(hr),Gravity projection + accelerometer bias/noise

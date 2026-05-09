@@ -329,6 +329,14 @@ def _run_static_drift_test(run_name: str = "run2",
 
     dcm_err = float(np.linalg.norm(state.C_b_e @ state.C_b_e.T - np.eye(3)))
 
+    # ENU breakdown of drift and velocity, useful to see whether the residual
+    # error is mostly horizontal (leveling/heading) or vertical (gravity/scale).
+    from coord_frames import R_enu_ecef, ecef_to_llh
+    lat0, lon0, _ = ecef_to_llh(*pos0)
+    R_enu = R_enu_ecef(lat0, lon0)
+    drift_enu = R_enu @ (state.pos_ecef - pos0)
+    vel_enu = R_enu @ state.vel_ecef
+
     pos_ok = pos_drift < 20.0
     vel_ok = vel_norm < 5.0
     dcm_ok = dcm_err < 1e-9
@@ -341,6 +349,10 @@ def _run_static_drift_test(run_name: str = "run2",
           f"[{'OK' if vel_ok else 'FAIL'}]")
     print(f"    DCM ortho err = {dcm_err:.2e}        (threshold 1e-9) "
           f"[{'OK' if dcm_ok else 'FAIL'}]")
+    print(f"    drift ENU:  E={drift_enu[0]:+7.3f}  "
+          f"N={drift_enu[1]:+7.3f}  U={drift_enu[2]:+7.3f}  m")
+    print(f"    vel ENU:    E={vel_enu[0]:+7.3f}  "
+          f"N={vel_enu[1]:+7.3f}  U={vel_enu[2]:+7.3f}  m/s")
 
     return ok
 
