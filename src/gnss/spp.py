@@ -1,6 +1,7 @@
 
 import src.gnss.utils.rinexReader as rr
 import src.gnss.utils.SatOrbits as so
+from .doppler_velocity import get_sat_pos_vel, doppler_velocity_solution
 
 import numpy as np
 import pandas as pd
@@ -47,9 +48,8 @@ def _spp(obs, satpos, x0):
 
         L, A = _create_kernel(obs, satpos, x)
 
-        AtA = A.values.T @ A.values
-        AtL = A.values.T @ L.values.flatten()
-        dx = np.linalg.inv(AtA) @ AtL
+        dx, *_ = np.linalg.lstsq(A.values, L.values.flatten(), rcond=None)
+        h = dx[:3]
 
         x = x+dx
         print(f"Iteration {curiter}: Solution: {x}")
@@ -72,20 +72,54 @@ def spp_loop(rinexFile: rr.rinexReader, svpos: so.sp3Orbits, sigTypes: str):
 
     for epoch in rinexFile.timelist:
         
-        obs = rinexFile.get_epoch_data(epoch, oTypes=sigTypes)
-        obs = obs.dropna() 
-        print(f"Observations for epoch {epoch}: {obs.values.flatten()}")
-        tau = obs.loc[:,'C1C'] / CLIGHT
-        satpos = svpos.getSvPos(epoch, tau)
-        print(f"Satellite positions for epoch {epoch}:\n{satpos}")
+        obs = rinexFile.get_epoch_data(epoch, oTypes=["C1C", "D1C"])
+        obs = obs.dropna(subset=["C1C", "D1C"])
 
-        # Split satellite positions and clock errors
-        cdts = satpos.iloc[:, 3] * CLIGHT 
-        satpos = satpos.iloc[:, :3] 
-        
-        obs = obs + cdts.values[:, None]
-        x = _spp(obs, satpos, x0=x0)
-        sol[epoch] = x
+        if len(obs) < 4:
+            continue
+
+        tau = obs["C1C"] / CLIGHT
+
+        satpos_full = svpos.getSvPos(epoch, tau)
+
+        cdts = satpos_full.iloc[:, 3] * CLIGHT
+        satpos = satpos_full.iloc[:, :3]
+
+        common = obs.index.intersection(satpos.index)
+
+        obs = obs.loc[common]
+        satpos = satpos.loc[common]
+
+        # Position from SPP
+        obs_corr = obs["C1C"] + cdts.loc[common]
+        x_pos = _spp(obs_corr, satpos, x0)
+        x0 = x_pos[["X", "Y", "Z", "cdt"]].values
+
+        if x_pos is None:
+            continue
+
+        receiver_pos = x_pos[["X", "Y", "Z"]].values
+
+        # Satellite velocity
+        satpos_v, satvel = get_sat_pos_vel(epoch, tau.loc[common], svpos)
+
+        common_vel = common.intersection(satpos_v.index).intersection(satvel.index)
+
+        if len(common_vel) < 4:
+            continue
+
+        vel_sol = doppler_velocity_solution(
+            receiver_pos,
+            satpos_v.loc[common_vel],
+            satvel.loc[common_vel],
+            obs.loc[common_vel, "D1C"],
+        )
+
+        if vel_sol is None:
+            continue
+
+        solution = pd.concat([x_pos, vel_sol])
+        sol[epoch] = solution
     
     endrun = time.time()
     processingtime = round(endrun-startrun, 3)

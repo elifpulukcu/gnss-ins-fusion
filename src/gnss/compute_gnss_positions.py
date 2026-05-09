@@ -17,7 +17,7 @@ args = argparser.parse_args()
 
 
 CONSTS = ['G'] 
-SIGTYPES = ["C1C"] 
+SIGTYPES = ["C1C","D1C"] 
 SVPOS = so.sp3Orbits(f"{PROJECT_ROOT}/data/COD0OPSRAP_20261130000_01D_05M_ORB.SP3")
 
 def main():
@@ -37,7 +37,7 @@ def main():
     # Convert UTC to GPS
     soldf.index = [utc_to_gps_sow(epoch) for epoch in soldf.index]
     soldf.index.name = "GPSTime"
-    soldf = soldf.drop(columns=['cdt'])
+    soldf = soldf.drop(columns=["cdt", "cdt_dot"], errors="ignore")
     print(soldf.head())
 
     soldf.to_csv(f"{PROJECT_ROOT}/output/gnss/SPP_solutions_run{RUN_NUMBER}.csv")
