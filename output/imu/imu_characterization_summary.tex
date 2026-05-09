@@ -1,0 +1,16 @@
+\begin{table}
+\caption{Static IMU characterization obtained from the stationary recording.}
+\label{tab:imu_characterization}
+\begin{tabular}{lrrll}
+\toprule
+Quantity & Mean & Std & Allan metric & Interpretation \\
+\midrule
+Gyro_X & 0.08489 & 0.089168 & ARW=0.558 deg/sqrt(hr) & Approximate gyro bias/noise level \\
+Gyro_Y & 0.065871 & 0.096399 & ARW=0.612 deg/sqrt(hr) & Approximate gyro bias/noise level \\
+Gyro_Z & 0.29253 & 0.098712 & ARW=0.678 deg/sqrt(hr) & Approximate gyro bias/noise level \\
+Accel_X & -0.17147 & 0.0067049 & VRW=0.035 m/s/sqrt(hr) & Gravity projection + accelerometer bias/noise \\
+Accel_Y & -0.28361 & 0.0068741 & VRW=0.034 m/s/sqrt(hr) & Gravity projection + accelerometer bias/noise \\
+Accel_Z & 9.8153 & 0.0064706 & VRW=0.030 m/s/sqrt(hr) & Gravity projection + accelerometer bias/noise \\
+\bottomrule
+\end{tabular}
+\end{table}

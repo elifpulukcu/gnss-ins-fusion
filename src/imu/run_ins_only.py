@@ -31,9 +31,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src" / "utils"))
 sys.path.insert(0, str(REPO_ROOT / "src" / "imu"))
 
-from coord_frames import R_ned_ecef, ecef_to_llh                    # noqa: E402
-from initial_state import load_groundtruth                          # noqa: E402
-from mechanization import (                                          # noqa: E402
+from coord_frames import R_ned_ecef, ecef_to_llh  # noqa: E402
+from initial_state import load_groundtruth  # noqa: E402
+from mechanization import (  # noqa: E402
     ACCEL_COLS,
     GYRO_COLS,
     load_initial_state,
@@ -64,7 +64,6 @@ def run_pure_ins(run_name: str) -> dict:
     imu_path = DATA_DIR / run_name / f"{run_name}_imu.txt"
     imu = pd.read_csv(imu_path, sep=r"\s+", engine="python")
 
-    # Only keep the IMU samples after the selected initial time.
     imu = imu[imu["Time"] >= state.t].reset_index(drop=True)
 
     n = len(imu)
@@ -116,7 +115,6 @@ def compare_with_groundtruth(ins: dict) -> dict:
     gt_path = DATA_DIR / run_name / f"{run_name}_groundtruth.txt"
     gt = load_groundtruth(gt_path)
 
-    # Use the first groundtruth point as the local NED reference.
     ref = np.array([
         gt["X-ECEF"].iloc[0],
         gt["Y-ECEF"].iloc[0],
@@ -131,7 +129,6 @@ def compare_with_groundtruth(ins: dict) -> dict:
     pos_ins_at_gt = np.zeros((len(gt_times), 3))
     vel_ins_at_gt = np.zeros((len(gt_times), 3))
 
-    # Interpolate each ECEF component separately.
     for j in range(3):
         pos_ins_at_gt[:, j] = np.interp(
             gt_times,
@@ -150,7 +147,6 @@ def compare_with_groundtruth(ins: dict) -> dict:
     pos_err_e = pos_ins_at_gt - pos_gt
     vel_err_e = vel_ins_at_gt - vel_gt
 
-    # Convert positions to local NED only for easier plotting.
     pos_ins_ned = (R @ (pos_ins_at_gt - ref).T).T
     pos_gt_ned = (R @ (pos_gt - ref).T).T
 
@@ -186,14 +182,7 @@ def plot_trajectory(run_name: str, cmp: dict) -> Path:
         alpha=0.85,
         label="pure INS",
     )
-    ax.scatter(
-        [0],
-        [0],
-        color="black",
-        s=40,
-        zorder=5,
-        label="start",
-    )
+    ax.scatter([0], [0], color="black", s=40, zorder=5, label="start")
 
     ax.set_xlabel("East [m]")
     ax.set_ylabel("North [m]")
@@ -212,7 +201,7 @@ def plot_trajectory(run_name: str, cmp: dict) -> Path:
 
 
 def _ecef_to_latlon_deg(pos_ecef: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Convert an (N, 3) ECEF array to (lat_deg, lon_deg) using coord_frames."""
+    """Convert an (N, 3) ECEF array to (lat_deg, lon_deg)."""
     lat, lon, _ = ecef_to_llh(pos_ecef[:, 0], pos_ecef[:, 1], pos_ecef[:, 2])
     return np.rad2deg(lat), np.rad2deg(lon)
 
@@ -231,8 +220,21 @@ def plot_trajectory_map(run_name: str, cmp: dict) -> Path:
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    gdf_gt.plot(ax=ax, color="#2196F3", linewidth=2.0, label="groundtruth", zorder=4)
-    gdf_ins.plot(ax=ax, color="#F44336", linewidth=1.0, alpha=0.9, label="pure INS", zorder=3)
+    gdf_gt.plot(
+        ax=ax,
+        color="#2196F3",
+        linewidth=2.0,
+        label="groundtruth",
+        zorder=4,
+    )
+    gdf_ins.plot(
+        ax=ax,
+        color="#F44336",
+        linewidth=1.0,
+        alpha=0.9,
+        label="pure INS",
+        zorder=3,
+    )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -240,7 +242,9 @@ def plot_trajectory_map(run_name: str, cmp: dict) -> Path:
 
     ax.set_title(
         f"Pure INS vs Ground Truth - {run_name}",
-        fontsize=14, fontweight="bold", pad=12,
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
     )
     ax.set_axis_off()
     ax.legend(
@@ -260,79 +264,75 @@ def plot_trajectory_map(run_name: str, cmp: dict) -> Path:
     return out
 
 
+def plot_all_runs_map(results: list[tuple[str, dict]]) -> Path:
+    """Overlay pure INS and ground truth for all runs on one OSM figure."""
+    fig, axes = plt.subplots(1, len(results), figsize=(16, 5), squeeze=False)
+
+    for ax, (run_name, cmp) in zip(axes[0], results):
+        gdf_gt = _trajectory_gdf(cmp["pos_gt_ecef"])
+        gdf_ins = _trajectory_gdf(cmp["pos_ins_ecef"])
+
+        gdf_gt.plot(
+            ax=ax,
+            color="#2196F3",
+            linewidth=2.0,
+            label="ground truth",
+            zorder=4,
+        )
+        gdf_ins.plot(
+            ax=ax,
+            color="#F44336",
+            linewidth=1.0,
+            alpha=0.9,
+            label="pure INS",
+            zorder=3,
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+
+        final_err = cmp["pos_err_mag"][-1]
+        ax.set_title(f"{run_name} (final error = {final_err:.0f} m)", fontsize=11)
+        ax.set_axis_off()
+
+    axes[0, 0].legend(
+        loc="lower right",
+        fontsize=9,
+        frameon=True,
+        facecolor="white",
+        edgecolor="#cccccc",
+    )
+
+    fig.suptitle("Pure INS vs ground truth on map", fontsize=14, fontweight="bold")
+    fig.tight_layout()
+
+    out = FIG_DIR / "ins_only_all_runs_trajectory_map.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    return out
+
+
 def plot_errors(run_name: str, cmp: dict) -> Path:
     """Plot position and velocity error over time."""
     t_rel = cmp["gt_times"] - cmp["gt_times"][0]
 
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
 
-    axes[0].plot(
-        t_rel,
-        cmp["pos_err_mag"],
-        color="black",
-        lw=1.2,
-        label="|pos err|",
-    )
-    axes[0].plot(
-        t_rel,
-        cmp["pos_err_e"][:, 0],
-        color="C0",
-        lw=0.6,
-        alpha=0.7,
-        label="X",
-    )
-    axes[0].plot(
-        t_rel,
-        cmp["pos_err_e"][:, 1],
-        color="C1",
-        lw=0.6,
-        alpha=0.7,
-        label="Y",
-    )
-    axes[0].plot(
-        t_rel,
-        cmp["pos_err_e"][:, 2],
-        color="C2",
-        lw=0.6,
-        alpha=0.7,
-        label="Z",
-    )
+    axes[0].plot(t_rel, cmp["pos_err_mag"], color="black", lw=1.2, label="|pos err|")
+    axes[0].plot(t_rel, cmp["pos_err_e"][:, 0], color="C0", lw=0.6, alpha=0.7, label="X")
+    axes[0].plot(t_rel, cmp["pos_err_e"][:, 1], color="C1", lw=0.6, alpha=0.7, label="Y")
+    axes[0].plot(t_rel, cmp["pos_err_e"][:, 2], color="C2", lw=0.6, alpha=0.7, label="Z")
     axes[0].set_ylabel("position error (ECEF) [m]")
     axes[0].set_title(f"{run_name}: pure INS errors against groundtruth")
     axes[0].legend(loc="upper left", fontsize=8)
     axes[0].grid(alpha=0.3)
 
-    axes[1].plot(
-        t_rel,
-        cmp["vel_err_mag"],
-        color="black",
-        lw=1.2,
-        label="|vel err|",
-    )
-    axes[1].plot(
-        t_rel,
-        cmp["vel_err_e"][:, 0],
-        color="C0",
-        lw=0.6,
-        alpha=0.7,
-        label="VX",
-    )
-    axes[1].plot(
-        t_rel,
-        cmp["vel_err_e"][:, 1],
-        color="C1",
-        lw=0.6,
-        alpha=0.7,
-        label="VY",
-    )
-    axes[1].plot(
-        t_rel,
-        cmp["vel_err_e"][:, 2],
-        color="C2",
-        lw=0.6,
-        alpha=0.7,
-        label="VZ",
-    )
+    axes[1].plot(t_rel, cmp["vel_err_mag"], color="black", lw=1.2, label="|vel err|")
+    axes[1].plot(t_rel, cmp["vel_err_e"][:, 0], color="C0", lw=0.6, alpha=0.7, label="VX")
+    axes[1].plot(t_rel, cmp["vel_err_e"][:, 1], color="C1", lw=0.6, alpha=0.7, label="VY")
+    axes[1].plot(t_rel, cmp["vel_err_e"][:, 2], color="C2", lw=0.6, alpha=0.7, label="VZ")
     axes[1].set_ylabel("velocity error (ECEF) [m/s]")
     axes[1].set_xlabel("time since start [s]")
     axes[1].legend(loc="upper left", fontsize=8)
@@ -342,6 +342,54 @@ def plot_errors(run_name: str, cmp: dict) -> Path:
 
     out = FIG_DIR / f"ins_only_{run_name}_errors.png"
     fig.savefig(out, dpi=120)
+    plt.close(fig)
+
+    return out
+
+
+def plot_all_runs_ned(results: list[tuple[str, dict]]) -> Path:
+    """Plot pure INS vs ground truth for all runs in local NED coordinates."""
+    fig, axes = plt.subplots(1, len(results), figsize=(15, 5), squeeze=False)
+
+    for ax, (run_name, cmp) in zip(axes[0], results):
+        gt_ned = cmp["pos_gt_ned"]
+        ins_ned = cmp["pos_ins_ned"]
+
+        ax.plot(gt_ned[:, 1], gt_ned[:, 0], color="C0", lw=1.8, label="ground truth")
+        ax.plot(ins_ned[:, 1], ins_ned[:, 0], color="C1", lw=1.0, alpha=0.9, label="pure INS")
+        ax.scatter(
+            [gt_ned[0, 1]],
+            [gt_ned[0, 0]],
+            color="black",
+            s=25,
+            zorder=5,
+            label="start",
+        )
+
+        ax.set_title(run_name)
+        ax.set_xlabel("East [m]")
+        ax.set_ylabel("North [m]")
+        ax.set_aspect("equal", adjustable="datalim")
+        ax.grid(alpha=0.3)
+
+        final_err = cmp["pos_err_mag"][-1]
+        ax.text(
+            0.02,
+            0.02,
+            f"final error = {final_err:.0f} m",
+            transform=ax.transAxes,
+            fontsize=9,
+            va="bottom",
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+        )
+
+    axes[0, 0].legend(loc="best", fontsize=8)
+
+    fig.suptitle("Pure INS vs ground truth in local NED")
+    fig.tight_layout()
+
+    out = FIG_DIR / "ins_only_all_runs_ned.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     return out
@@ -367,10 +415,13 @@ def save_csv(run_name: str, ins: dict) -> Path:
 
 def main():
     summary = []
+    plot_results = []
 
     for run in RUN_NAMES:
         ins = run_pure_ins(run)
         cmp = compare_with_groundtruth(ins)
+
+        plot_results.append((run, cmp))
 
         plot_trajectory(run, cmp)
         plot_trajectory_map(run, cmp)
@@ -394,6 +445,12 @@ def main():
             "max_pos_err_m": max_pos,
             "max_vel_err_m_s": max_vel,
         })
+
+    all_runs_ned_fig = plot_all_runs_ned(plot_results)
+    print(f"Saved {all_runs_ned_fig}")
+
+    all_runs_map_fig = plot_all_runs_map(plot_results)
+    print(f"Saved {all_runs_map_fig}")
 
     print()
     print("=" * 64)

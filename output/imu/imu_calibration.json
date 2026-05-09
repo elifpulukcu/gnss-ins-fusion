@@ -6,8 +6,8 @@
   "gyro_unit_guess": "deg/s (likely)",
   "gravity_magnitude_measured": 9.820933280608667,
   "static_attitude_from_gravity": {
-    "roll_deg": 1.6550756322220235,
-    "pitch_deg": -1.0004229598297287
+    "roll_deg": 1.000840412044988,
+    "pitch_deg": -1.6548232727309016
   },
   "bias": {
     "Gyro_X": 0.08489003607577746,

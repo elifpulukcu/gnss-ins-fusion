@@ -67,14 +67,15 @@ print(f"X/Y bias (tilt + sensor bias mixed): "
       f"ay={stats.loc['Accel_Y', 'mean']:+.4f}")
 
 # This sensor outputs Az ~ +9.81 when stationary, so the convention is
-# specific force with body-z pointing up. With that, the small-angle
-# accelerometer-leveling formulas are:
-#   pitch = atan2(a_x, sqrt(a_y^2 + a_z^2))
-#   roll  = atan2(-a_y, a_z)
+# specific force with body-z pointing up. With body convention
+# x=right, y=forward, z=up, pitch is rotation about x and roll is
+# rotation about y, so the accelerometer-leveling formulas are:
+#   pitch = atan2(a_y, sqrt(a_x^2 + a_z^2))
+#   roll  = atan2(-a_x, a_z)
 # Heads up: if a future IMU swaps signs (Az ~ -9.81) flip these.
 ax, ay, az = stats.loc[ACCEL_COLS, "mean"].values
-pitch_rad = np.arctan2(ax, np.sqrt(ay ** 2 + az ** 2))
-roll_rad = np.arctan2(-ay, az)
+pitch_rad = np.arctan2(ay, np.hypot(ax, az))
+roll_rad = np.arctan2(-ax, az)
 print(f"Implied roll  = {np.rad2deg(roll_rad):+.3f} deg")
 print(f"Implied pitch = {np.rad2deg(pitch_rad):+.3f} deg")
 # These are non-zero because the IMU was not perfectly level. That tilt
@@ -140,25 +141,37 @@ print(f"Saved {FIG_DIR / 'static_imu_histogram.png'}")
 
 
 # %%
-# Plot 3: 30-second rolling mean. This is a crude way to see whether the
-# bias is creeping over the 45-minute window. Allan variance below tells
-# the same story properly, but this plot is easier to read at a glance.
+# Plot 3: rolling mean per axis. Each channel gets its own panel so the
+# slow bias variations are visible regardless of the channel's absolute
+# value. Useful to see whether the bias is creeping over the 45-minute
+# window. Allan variance below tells the same story properly, but this
+# plot is easier to read at a glance.
 window = int(30 * fs)
-fig, axes = plt.subplots(2, 1, figsize=(11, 6), sharex=True)
-for col in GYRO_COLS:
-    axes[0].plot(df["t_rel"], df[col].rolling(window).mean(), label=col)
-axes[0].set_ylabel("Gyro rolling mean")
-axes[0].set_title(f"Rolling mean (window = {window} samples ~ 30 s)")
-axes[0].legend()
-axes[0].grid(alpha=0.3)
 
-for col in ACCEL_COLS:
-    axes[1].plot(df["t_rel"], df[col].rolling(window).mean(), label=col)
-axes[1].set_ylabel("Accel rolling mean [m/s^2]")
-axes[1].set_xlabel("Time [s]")
-axes[1].legend()
-axes[1].grid(alpha=0.3)
+fig, axes = plt.subplots(2, 3, figsize=(13, 6), sharex=True)
 
+for ax, col in zip(axes[0], GYRO_COLS):
+    rolling = df[col].rolling(window).mean()
+    ax.plot(df["t_rel"], rolling, lw=0.8)
+    ax.axhline(df[col].mean(), color="red", lw=0.5, linestyle="--",
+               label=f"overall mean = {df[col].mean():+.4f}")
+    ax.set_title(col)
+    ax.set_ylabel("deg/s")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, loc="best")
+
+for ax, col in zip(axes[1], ACCEL_COLS):
+    rolling = df[col].rolling(window).mean()
+    ax.plot(df["t_rel"], rolling, lw=0.8)
+    ax.axhline(df[col].mean(), color="red", lw=0.5, linestyle="--",
+               label=f"overall mean = {df[col].mean():+.4f}")
+    ax.set_title(col)
+    ax.set_ylabel("m/s$^2$")
+    ax.set_xlabel("Time [s]")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, loc="best")
+
+fig.suptitle(f"30-second rolling mean per axis (window = {window} samples)")
 fig.tight_layout()
 fig.savefig(FIG_DIR / "static_imu_rolling_mean.png", dpi=120)
 print(f"Saved {FIG_DIR / 'static_imu_rolling_mean.png'}")
@@ -292,3 +305,50 @@ calib_path = OUT_DIR / "imu_calibration.json"
 calib_path.write_text(json.dumps(calibration, indent=2))
 print(f"\nSaved {calib_path}")
 print(json.dumps(calibration, indent=2))
+
+# %%
+# Simple report table from our IMU bias analysis
+
+summary_rows = []
+
+for col in GYRO_COLS:
+    summary_rows.append({
+        "Quantity": col,
+        "Mean": stats.loc[col, "mean"],
+        "Std": stats.loc[col, "std"],
+        "Allan metric": (
+            f"ARW={noise_params[col]['arw_deg_per_sqrt_hr']:.3f} deg/sqrt(hr)"
+        ),
+        "Interpretation": "Approximate gyro bias/noise level"
+    })
+
+for col in ACCEL_COLS:
+    summary_rows.append({
+        "Quantity": col,
+        "Mean": stats.loc[col, "mean"],
+        "Std": stats.loc[col, "std"],
+        "Allan metric": (
+            f"VRW={noise_params[col]['vrw_m_per_s_per_sqrt_hr']:.3f} m/s/sqrt(hr)"
+        ),
+        "Interpretation": "Gravity projection + accelerometer bias/noise"
+    })
+
+summary_table = pd.DataFrame(summary_rows)
+
+print("\nIMU CHARACTERIZATION SUMMARY")
+print(summary_table)
+
+summary_table.to_csv(
+    OUT_DIR / "imu_characterization_summary.csv",
+    index=False
+)
+
+summary_table.to_latex(
+    OUT_DIR / "imu_characterization_summary.tex",
+    index=False,
+    float_format="%.5g",
+    caption="Static IMU characterization obtained from the stationary recording.",
+    label="tab:imu_characterization"
+)
+
+print(f"\nSaved {OUT_DIR / 'imu_characterization_summary.tex'}")
