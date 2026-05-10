@@ -140,13 +140,14 @@ def compare_with_groundtruth(run: int, kf_df: pd.DataFrame) -> dict:
 
 
 
-def plot_errors(run: int, cmp: dict):
+def plot_errors(run: int, cmp: dict, r_scale: float = 1.0):
     t = cmp["times"] - cmp["times"][0]
 
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
 
     axes[0].plot(t, cmp["pos_err_mag"], label="|position error|")
     axes[0].set_ylabel("Position error [m]")
+    #axes[0].set_ylim(0, 70)   # <-- y-axis limits
     axes[0].set_title(f"Run {run}: KF position error")
     axes[0].grid(alpha=0.3)
     axes[0].legend()
@@ -170,13 +171,13 @@ def plot_errors(run: int, cmp: dict):
             alpha=0.2,
         )
     fig.tight_layout()
-    out_path = FIG_DIR / f"kf_errors_run{run}.png"
+    out_path = FIG_DIR / f"kf_errors_run{run}_scale{r_scale}.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"Saved {out_path}")
 
 
-def plot_trajectory(run: int, cmp: dict):
+def plot_trajectory(run: int, cmp: dict, r_scale: float = 1.0):
     fig, ax = plt.subplots(figsize=(9, 8))
 
     ax.plot(
@@ -220,7 +221,7 @@ def plot_trajectory(run: int, cmp: dict):
 
     fig.tight_layout()
 
-    out_path = FIG_DIR / f"trajectory_comparison_run{run}.png"
+    out_path = FIG_DIR / f"trajectory_comparison_run{run}_scale{r_scale}.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
@@ -245,7 +246,7 @@ def print_error_stats(run: int, cmp: dict):
     stats("GNSS/INS KF", cmp["kf_err_ned"])
     
     
-def plot_error_comparison(run: int, cmp: dict):
+def plot_error_comparison(run: int, cmp: dict, r_scale: float = 1.0):
     t = cmp["times"] - cmp["times"][0]
 
     fig, ax = plt.subplots(figsize=(11, 5))
@@ -269,7 +270,7 @@ def plot_error_comparison(run: int, cmp: dict):
     ax.legend()
 
     fig.tight_layout()
-    out_path = FIG_DIR / f"position_error_comparison_run{run}.png"
+    out_path = FIG_DIR / f"position_error_comparison_run{run}_scale{r_scale}.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"Saved {out_path}")

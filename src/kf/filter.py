@@ -1,7 +1,7 @@
 import numpy as np
 
 from .dynamics import build_F, discretize, STATE_DIM
-from .noise import build_Q
+from .noise import build_Q, build_Q_fromAllanAnalysis
 from coord_frames import skew  
 
 class ErrorStateKF:
@@ -10,12 +10,12 @@ class ErrorStateKF:
 
         # Initial tuning values; adjust later
         if R_pos is None:
-            self.R_pos = np.eye(3) * 20.0**2   # GNSS position noise: 5 m
+            self.R_pos = np.eye(3) * 10.0**2
         else:
             self.R_pos = R_pos
 
         if R_vel is None:
-            self.R_vel = np.eye(3) * 0.5**2   # GNSS velocity noise: 2 m/s
+            self.R_vel = np.eye(3) * 0.5**2
         else:
             self.R_vel = R_vel
     
