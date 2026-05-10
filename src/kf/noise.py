@@ -32,11 +32,19 @@ velocity in F/Phi.
 
 import sys
 from pathlib import Path
+import json
 
 import numpy as np
 
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src" / "kf"))
+CALIB_PATH = REPO_ROOT / "output" / "imu" / "imu_calibration.json"
+
+GYRO_AXES = ["Gyro_X", "Gyro_Y", "Gyro_Z"]
+ACCEL_AXES = ["Accel_X", "Accel_Y", "Accel_Z"]
+
+DEG_TO_RAD2 = (np.pi / 180.0) ** 2
 
 from dynamics import (  # noqa: E402
     BA_SLICE,
@@ -67,6 +75,56 @@ def build_Q(dt: float) -> np.ndarray:
     # Biases are modelled as random walks, so their uncertainty grows with dt.
     Q[BA_SLICE, BA_SLICE] = np.eye(3) * ACCEL_BIAS_PSD * dt
     Q[BG_SLICE, BG_SLICE] = np.eye(3) * GYRO_BIAS_PSD * dt
+
+    return Q
+
+def _load_allan_params(path: Path) -> dict:
+    data = json.loads(path.read_text())
+    return data["allan_noise_params"]
+
+
+def _white_noise_psd(allan: dict, axes: list[str]) -> np.ndarray:
+    """Return per-axis white-noise PSD from sigma_at_1s."""
+    return np.array([allan[axis]["sigma_at_1s"]**2 for axis in axes])
+
+
+def _bias_rw_psd(allan: dict, axes: list[str]) -> np.ndarray:
+    """Return the per-axis bias random-walk PSD used by the filter.
+
+    This currently uses bias_instability as a practical starting value.
+    It is intentionally a bit conservative so the filter can move the bias
+    states during early GNSS updates.
+    """
+    return np.array([allan[axis]["bias_instability"]**2 for axis in axes])
+
+def build_Q_fromAllanAnalysis(dt: float, calibration_path: Path = CALIB_PATH) -> np.ndarray:
+    """Build the discrete process-noise covariance for one IMU step.
+
+    Args:
+        dt: IMU sample interval in seconds.
+        calibration_path: Path to imu_calibration.json.
+
+    Returns:
+        A 15x15 discrete-time Q matrix.
+
+    Notes:
+        The position block is left at zero. Position uncertainty grows
+        through the position-velocity coupling in F and Phi.
+    """
+    allan = _load_allan_params(calibration_path)
+
+    accel_white_psd = _white_noise_psd(allan, ACCEL_AXES)
+    gyro_white_psd = _white_noise_psd(allan, GYRO_AXES) * DEG_TO_RAD2
+
+    accel_bias_rw_psd = _bias_rw_psd(allan, ACCEL_AXES)
+    gyro_bias_rw_psd = _bias_rw_psd(allan, GYRO_AXES) * DEG_TO_RAD2
+
+    Q = np.zeros((STATE_DIM, STATE_DIM))
+
+    Q[V_SLICE, V_SLICE] = np.diag(accel_white_psd) * dt
+    Q[PSI_SLICE, PSI_SLICE] = np.diag(gyro_white_psd) * dt
+    Q[BA_SLICE, BA_SLICE] = np.diag(accel_bias_rw_psd) * dt
+    Q[BG_SLICE, BG_SLICE] = np.diag(gyro_bias_rw_psd) * dt
 
     return Q
 

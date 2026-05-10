@@ -33,15 +33,34 @@ DATA_DIR = PROJECT_ROOT / "data"
   
 
 
-def run_kf(run: int, outage_start_s: float | None = None, outage_duration_s: float = 0.0) -> pd.DataFrame:
+def run_kf(run: int, outage_start_s: float | None = None, outage_duration_s: float = 0.0, r_scale: float = 1.0) -> pd.DataFrame:
     run_name = f"run{run}"
 
     # Initial nominal INS state and covariance
     state = load_initial_state(run_name)
     P0 = build_P0(run_name)
+    
+    lat0, lon0, _ = ecef_to_llh(*state.pos_ecef)
+    R_ne = R_ned_ecef(lat0, lon0)   # ECEF -> NED
 
-    # Start with position-only GNSS update
-    kf = ErrorStateKF(P0)
+    pos_scale = r_scale
+
+    R_pos_ned = np.diag([
+        (10.0 * pos_scale)**2,
+        (10.0 * pos_scale)**2,
+        (25.0 * pos_scale)**2,
+    ])
+    R_pos_ecef = R_ne.T @ R_pos_ned @ R_ne
+
+    R_vel_ned = np.diag([
+        (0.5* pos_scale)**2,
+        (0.5* pos_scale)**2,
+        (0.8* pos_scale)**2,
+    ])
+
+    R_vel_ecef = R_ne.T @ R_vel_ned @ R_ne
+
+    kf = ErrorStateKF(P0, R_pos=R_pos_ecef, R_vel=R_vel_ecef)
 
     # Load IMU and GNSS
     imu_path = DATA_DIR / run_name / f"{run_name}_imu.txt"
@@ -131,23 +150,25 @@ def main():
                     help="Outage start time in seconds after run start")
     parser.add_argument("--outage-duration", type=float, default=0.0,
                     help="GNSS outage duration in seconds")
+    parser.add_argument("--r-scale", type=float, default=1.0)
     args = parser.parse_args()
 
     kf_df = run_kf(
         args.run,
         outage_start_s=args.outage_start,
         outage_duration_s=args.outage_duration,
+        r_scale = args.r_scale
     )
-    print("Running KF solution for run:", args.run)
+    print("Running KF solution for run:", args.run, "and scale:", args.r_scale)
     cmp = compare_with_groundtruth(args.run, kf_df)
     cmp["outage_start_s"] = args.outage_start
     cmp["outage_duration_s"] = args.outage_duration
 
-    plot_trajectory(args.run, cmp)
-    plot_errors(args.run, cmp)
+    plot_trajectory(args.run, cmp, args.r_scale)
+    plot_errors(args.run, cmp, args.r_scale)
 
     print_error_stats(args.run, cmp)
-    plot_error_comparison(args.run, cmp)
+    plot_error_comparison(args.run, cmp, args.r_scale)
 
 
 if __name__ == "__main__":
